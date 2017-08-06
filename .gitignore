@@ -1,0 +1,17 @@
+.cache/
+bazel-*
+data
+output
+hdrnet/sandbox.py
+*.pyc
+log
+tensorflow
+.DS_Store
+WORKSPACE
+tb_*
+old_scripts
+pretrained_models
+
+!pretrained_models/download.py
+!pretrained_models/local_laplacian_sample
+!sample_data/identity/output
