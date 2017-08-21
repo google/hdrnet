@@ -40,7 +40,7 @@ To build the benchmarking code, run:
     make
 
 Note that the benchmarking code requires a frozen and optimized model. Use
-`hdrnet/bin/scripts/optimize_graph.py` and `hdrnet/bin/freeze.py to produce these`.
+`hdrnet/bin/scripts/optimize_graph.sh` and `hdrnet/bin/freeze.py to produce these`.
 
 To build the Android demo, see dedicated section below.
 
