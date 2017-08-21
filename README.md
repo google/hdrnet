@@ -11,7 +11,7 @@ Fredo Durand
 
 Maintained by Michael Gharbi (<gharbi@mit.edu>)
 
-Tested on Python 2.7, Ubuntu 14.04.
+Tested on Python 2.7, Ubuntu 14.0, gcc-4.8.
 
 ## Disclaimer
 
