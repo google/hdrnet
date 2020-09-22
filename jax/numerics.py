@@ -18,26 +18,25 @@
 import jax.numpy as jnp
 
 
-# TODO(jiawen): Move the 0.5 to the caller.
-def lerp_weight(x, xf):
-  """Linear interpolation weight from a sample at x to xf.
+def lerp_weight(x, xs):
+  """Linear interpolation weight from a sample at x to xs.
 
-  Returns the linear interpolation weight of the sample at integer coordinate
-  `x` with respect to a sample at floating point coordinate `xf`.
+  Returns the linear interpolation weight of a "query point" at coordinate `x`
+  with respect to a "sample" at coordinate `xs`.
 
   The integer coordinates `x` are at pixel centers.
-  The floating point coordinates `xf` are at pixel edges.
+  The floating point coordinates `xs` are at pixel edges.
   (OpenGL convention).
 
   Args:
-    x: Sample position.
-    xf: Query position.
+    x: "Query" point position.
+    xs: "Sample" position.
 
   Returns:
-    - 1 when x = xf - 0.5f (equivalently, when x + 0.5f = xf).
-    - 0 when |x - xf| > 0.5.
+    - 1 when x = xs.
+    - 0 when |x - xs| > 1.
   """
-  dx = x + 0.5 - xf
+  dx = x - xs
   abs_dx = abs(dx)
   return jnp.maximum(1.0 - abs_dx, 0.0)
 
@@ -62,12 +61,11 @@ def smoothed_abs_grad(x, eps=1e-8):
   return jnp.divide(x, jnp.sqrt(jnp.multiply(x, x) + eps))
 
 
-# TODO(jiawen): Move the 0.5 to the caller.
-def smoothed_lerp_weight(x, xf, eps=1e-8):
+def smoothed_lerp_weight(x, xs, eps=1e-8):
   """Smoothed version of `LerpWeight` with gradients more suitable for backprop.
 
-  Let f(x, xf) = LerpWeight(x, xf)
-               = max(1 - |x + 0.5 - xf|, 0)
+  Let f(x, xs) = LerpWeight(x, xs)
+               = max(1 - |x - xs|, 0)
                = max(1 - |dx|, 0)
 
   f is not smooth when:
@@ -80,21 +78,21 @@ def smoothed_lerp_weight(x, xf, eps=1e-8):
     than returning a 0 gradient).
 
   Args:
-    x: Sample position.
-    xf: Query position.
+    x: "Query" point position.
+    xs: "Sample" position.
     eps: a small number.
 
   Returns:
     max(1 - |dx|, 0) where |dx| is smoothed_abs(dx).
   """
-  dx = x + 0.5 - xf
+  dx = x - xs
   abs_dx = smoothed_abs(dx, eps)
   return jnp.maximum(1.0 - abs_dx, 0.0)
 
 
-def smoothed_lerp_weight_grad(x, xf, eps=1e-8):
+def smoothed_lerp_weight_grad(x, xs, eps=1e-8):
   """Gradient of smoothed_lerp_weight."""
-  dx = x + 0.5 - xf
+  dx = x - xs
   abs_dx = smoothed_abs(dx, eps)
   grad = smoothed_abs_grad(dx, eps)
   return jnp.where(abs_dx > 1, 0, grad)

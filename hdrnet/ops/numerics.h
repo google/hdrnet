@@ -44,20 +44,14 @@
 #define HDRNET_CUDA_INLINE_FUNC inline
 #endif
 
-// Returns the linear interpolation weight of the sample at integer coordinate
-// `x` with respect to a sample at floating point coordinate `xf`.
-//
-// The integer coordinates `x` are at pixel centers.
-// The floating point coordinates `xf` are at pixel edges.
-// (OpenGL convention).
+// Returns the linear interpolation weight of a "query point" at coordinate `x`
+// with respect to a "sample" at coordinate `xs`.
 //
 // This function is:
-// - 1 when x = xf - 0.5f (equivalently, when x + 0.5f = xf).
-// - 0 when |x - xf| > 0.5.
-//
-// TODO(jiawen): Move the 0.5 to the caller.
-HDRNET_CUDA_INLINE_FUNC float LerpWeight(int x, float xf) {
-  const float dx = x + 0.5f - xf;
+// - 1 when x = xs.
+// - 0 when |x - xs| > 1.
+HDRNET_CUDA_INLINE_FUNC float LerpWeight(float x, float xs) {
+  const float dx = x - xs;
   const float abs_dx = std::abs(dx);
   return std::max(1.0f - abs_dx, 0.0f);
 }
@@ -99,8 +93,8 @@ HDRNET_CUDA_INLINE_FUNC float SmoothedAbsGrad(float x, float eps = 1.0e-8f) {
 // A smoothed version of `LerpWeight` with gradients more suitable for back
 // propagation.
 //
-// Let f(x, xf) = LerpWeight(x, xf)
-//              = max(1 - |x + 0.5 - xf|, 0)
+// Let f(x, xs) = LerpWeight(x, xs)
+//              = max(1 - |x - xs|, 0)
 //              = max(1 - |dx|, 0)
 //
 // f is not smooth when:
@@ -111,20 +105,17 @@ HDRNET_CUDA_INLINE_FUNC float SmoothedAbsGrad(float x, float eps = 1.0e-8f) {
 //   We just ignore this (in the implementation below, when the floats are
 //   exactly equal, we choose the SmoothedAbsGrad path since it is more useful
 //   than returning a 0 gradient).
-//
-// TODO(jiawen): Move 0.5f to the caller.
-HDRNET_CUDA_INLINE_FUNC float SmoothedLerpWeight(int x, float xf,
+HDRNET_CUDA_INLINE_FUNC float SmoothedLerpWeight(float x, float xs,
                                                  float eps = 1.0e-8f) {
-  const float dx = x + 0.5f - xf;
+  const float dx = x - xs;
   const float abs_dx = SmoothedAbs(dx, eps);
   return std::max(1.0f - abs_dx, 0.0f);
 }
 
 // Gradient of `SmoothedLerpWeight`.
-// TODO(jiawen): Move 0.5f to the caller.
-HDRNET_CUDA_INLINE_FUNC float SmoothedLerpWeightGrad(int x, float xf,
+HDRNET_CUDA_INLINE_FUNC float SmoothedLerpWeightGrad(float x, float xs,
                                                      float eps = 1.0e-8f) {
-  const float dx = x + 0.5f - xf;
+  const float dx = x - xs;
   const float abs_dx = SmoothedAbs(dx, eps);
   if (abs_dx > 1.0f) {
     // Gradient when the *smoothed* |dx| exceeds 1.

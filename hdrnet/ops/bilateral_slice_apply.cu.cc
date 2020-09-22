@@ -77,15 +77,15 @@ __global__ void BilateralSliceApplyKernel(
 
       for (int gy = gy0; gy < gy0 + 2; ++gy) {
         const int gyc = std::clamp(gy, 0, grid_height - 1);
-        const float wy = LerpWeight(gy, gyf);
+        const float wy = LerpWeight(gy + 0.5f, gyf);
 
         for (int gx = gx0; gx < gx0 + 2; ++gx) {
           const int gxc = std::clamp(gx, 0, grid_width - 1);
-          const float wx = LerpWeight(gx, gxf);
+          const float wx = LerpWeight(gx + 0.5f, gxf);
 
           for (int gz = gz0; gz < gz0 + 2; ++gz) {
             const int gzc = std::clamp(gz, 0, grid_depth - 1);
-            const float wz = SmoothedLerpWeight(gz, gzf);
+            const float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
 
             const int grid_idx = (grid_i_stride * i + j) + grid_z_stride * gzc +
                                  grid_x_stride * gxc + grid_y_stride * gyc +
@@ -152,19 +152,19 @@ __global__ void BilateralSliceApplyGridGradKernel(
     for (int y = y0; y < y1_exclusive; ++y) {
       const int y_mirror = MirrorBoundary(y, input_height);
       const float gyf = (y + 0.5f) / scale_y;
-      const float wy = LerpWeight(gy, gyf);
+      const float wy = LerpWeight(gy + 0.5f, gyf);
 
       for (int x = x0; x < x1_exclusive; ++x) {
         // TODO(jiawen): Consider using clamp boundary.
         const int x_mirror = MirrorBoundary(x, input_width);
         const float gxf = (x + 0.5f) / scale_x;
-        const float wx = LerpWeight(gx, gxf);
+        const float wx = LerpWeight(gx + 0.5f, gxf);
 
         // TODO(jiawen): Offset gz by 0.5 as well.
         const int guide_idx =
             x_mirror + input_width * y_mirror + input_height * input_width * b;
         const float gzf = guide[guide_idx] * grid_depth;
-        float wz = SmoothedLerpWeight(gz, gzf);
+        float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
         if ((gz == 0 && gzf < 0.5f) ||
             (gz == grid_depth - 1 && gzf > grid_depth - 0.5f)) {
           wz = 1.0f;
@@ -230,17 +230,18 @@ __global__ void BilateralSliceApplyGuideGradKernel(
 
         for (int gy = gy0; gy < gy0 + 2; ++gy) {
           const int gyc = std::clamp(gy, 0, grid_height - 1);
-          const float wy = LerpWeight(gy, gyf);
+          const float wy = LerpWeight(gy + 0.5f, gyf);
 
           // Grid trilinear interpolation to retrieve grid(gxf, gyf, gzf, i, j).
           for (int gx = gx0; gx < gx0 + 2; ++gx) {
             const int gxc = std::clamp(gx, 0, grid_width - 1);
-            const float wx = LerpWeight(gx, gxf);
+            const float wx = LerpWeight(gx + 0.5f, gxf);
 
             for (int gz = gz0; gz < gz0 + 2; ++gz) {
               const int gzc = std::clamp(gz, 0, grid_depth - 1);
               // TODO(jiawen): Offset gz by 0.5 as well?
-              const float dwz = grid_depth * SmoothedLerpWeightGrad(gz, gzf);
+              const float dwz =
+                  grid_depth * SmoothedLerpWeightGrad(gz + 0.5f, gzf);
 
               const int grid_idx = j + grid_i_stride * i + grid_z_stride * gzc +
                                    grid_x_stride * gxc + grid_y_stride * gyc +
@@ -307,15 +308,15 @@ __global__ void BilateralSliceApplyInputGradKernel(
       // Grid trilinear interpolation to retrieve grid(gxf, gyf, gzf, i, j).
       for (int gy = gy0; gy < gy0 + 2; ++gy) {
         const int gyc = std::clamp(gy, 0, grid_height - 1);
-        const float wy = LerpWeight(gy, gyf);
+        const float wy = LerpWeight(gy + 0.5f, gyf);
 
         for (int gx = gx0; gx < gx0 + 2; ++gx) {
           const int gxc = std::clamp(gx, 0, grid_width - 1);
-          const float wx = LerpWeight(gx, gxf);
+          const float wx = LerpWeight(gx + 0.5f, gxf);
 
           for (int gz = gz0; gz < gz0 + 2; ++gz) {
             const int gzc = std::clamp(gz, 0, grid_depth - 1);
-            const float wz = SmoothedLerpWeight(gz, gzf);
+            const float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
 
             const int grid_idx = j + grid_i_stride * i + grid_z_stride * gzc +
                                  grid_x_stride * gxc + grid_y_stride * gyc +

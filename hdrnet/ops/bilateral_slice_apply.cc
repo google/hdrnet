@@ -53,15 +53,15 @@ void BilateralSliceApply(nda::array_ref_of_rank<const float, 6> grid,
       float grid_sample = 0.0f;
       for (int gy = gy0; gy < gy0 + 2; ++gy) {
         const int gyc = std::clamp(gy, 0, grid_height - 1);
-        const float wy = LerpWeight(gy, gyf);
+        const float wy = LerpWeight(gy + 0.5f, gyf);
 
         for (int gx = gx0; gx < gx0 + 2; ++gx) {
           const int gxc = std::clamp(gx, 0, grid_width - 1);
-          const float wx = LerpWeight(gx, gxf);
+          const float wx = LerpWeight(gx + 0.5f, gxf);
 
           for (int gz = gz0; gz < gz0 + 2; ++gz) {
             const int gzc = std::clamp(gz, 0, grid_depth - 1);
-            const float wz = SmoothedLerpWeight(gz, gzf);
+            const float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
 
             grid_sample += wx * wy * wz * grid(j, i, gzc, gxc, gyc, b);
           }  // gz
@@ -107,17 +107,17 @@ void BilateralSliceApplyGridGrad(
     for (int y = y0; y < y1_exclusive; ++y) {
       const int y_mirror = MirrorBoundary(y, input_height);
       const float gyf = (y + 0.5f) / scale_y;
-      const float wy = LerpWeight(gy, gyf);
+      const float wy = LerpWeight(gy + 0.5f, gyf);
 
       for (int x = x0; x < x1_exclusive; ++x) {
         // TODO(jiawen): Consider using clamp boundary.
         const int x_mirror = MirrorBoundary(x, input_width);
         const float gxf = (x + 0.5f) / scale_x;
-        const float wx = LerpWeight(gx, gxf);
+        const float wx = LerpWeight(gx + 0.5f, gxf);
 
         // TODO(jiawen): Offset gz by 0.5 as well.
         const float gzf = guide(x_mirror, y_mirror, b) * grid_depth;
-        float wz = SmoothedLerpWeight(gz, gzf);
+        float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
         if ((gz == 0 && gzf < 0.5f) ||
             (gz == grid_depth - 1 && gzf > grid_depth - 0.5f)) {
           wz = 1.0f;
@@ -172,16 +172,17 @@ void BilateralSliceApplyGuideGrad(
         // Grid trilinear interpolation to retrieve grid(gxf, gyf, gzf, i, j).
         for (int gy = gy0; gy < gy0 + 2; ++gy) {
           const int gyc = std::clamp(gy, 0, grid_height - 1);
-          const float wy = LerpWeight(gy, gyf);
+          const float wy = LerpWeight(gy + 0.5f, gyf);
 
           for (int gx = gx0; gx < gx0 + 2; ++gx) {
             const int gxc = std::clamp(gx, 0, grid_width - 1);
-            const float wx = LerpWeight(gx, gxf);
+            const float wx = LerpWeight(gx + 0.5f, gxf);
 
             for (int gz = gz0; gz < gz0 + 2; ++gz) {
               const int gzc = std::clamp(gz, 0, grid_depth - 1);
               // TODO(jiawen): Offset gz by 0.5 as well?
-              const float dwz = grid_depth * SmoothedLerpWeightGrad(gz, gzf);
+              const float dwz =
+                  grid_depth * SmoothedLerpWeightGrad(gz + 0.5f, gzf);
 
               grid_sample += wx * wy * dwz * grid(j, i, gzc, gxc, gyc, b);
             }  // gz
@@ -230,15 +231,15 @@ void BilateralSliceApplyInputGrad(
       // Grid trilinear interpolation to retrieve grid(gxf, gyf, gzf, i, j).
       for (int gy = gy0; gy < gy0 + 2; ++gy) {
         const int gyc = std::clamp(gy, 0, grid_height - 1);
-        const float wy = LerpWeight(gy, gyf);
+        const float wy = LerpWeight(gy + 0.5f, gyf);
 
         for (int gx = gx0; gx < gx0 + 2; ++gx) {
           const int gxc = std::clamp(gx, 0, grid_width - 1);
-          const float wx = LerpWeight(gx, gxf);
+          const float wx = LerpWeight(gx + 0.5f, gxf);
 
           for (int gz = gz0; gz < gz0 + 2; ++gz) {
             const int gzc = std::clamp(gz, 0, grid_depth - 1);
-            const float wz = SmoothedLerpWeight(gz, gzf);
+            const float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
 
             grad_val += wx * wy * wz * grid(j, i, gzc, gxc, gyc, b);
           }  // gz

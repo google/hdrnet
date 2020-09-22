@@ -57,12 +57,12 @@ def bilateral_slice_guide_vjp(grid, guide, codomain_tangent):
   gj1 = gj0 + 1
   gk1 = gk0 + 1
 
-  wi0 = lerp_weight(gi0, gif)
-  wi1 = lerp_weight(gi1, gif)
-  wj0 = lerp_weight(gj0, gjf)
-  wj1 = lerp_weight(gj1, gjf)
-  dwk0 = grid_depth * smoothed_lerp_weight_grad(gk0, gkf)
-  dwk1 = grid_depth * smoothed_lerp_weight_grad(gk1, gkf)
+  wi0 = lerp_weight(gi0 + 0.5, gif)
+  wi1 = lerp_weight(gi1 + 0.5, gif)
+  wj0 = lerp_weight(gj0 + 0.5, gjf)
+  wj1 = lerp_weight(gj1 + 0.5, gjf)
+  dwk0 = grid_depth * smoothed_lerp_weight_grad(gk0 + 0.5, gkf)
+  dwk1 = grid_depth * smoothed_lerp_weight_grad(gk1 + 0.5, gkf)
 
   w_000 = wi0 * wj0 * dwk0
   w_001 = wi0 * wj0 * dwk1
@@ -147,7 +147,7 @@ def _compute_spatial_weights(image_extent, grid_extent):
   gif, gi = jnp.meshgrid(
       grid_indices_float, jnp.arange(grid_extent), indexing='ij')
 
-  weights = lerp_weight(gi, gif)
+  weights = lerp_weight(gi + 0.5, gif)
 
   return weights
 
@@ -206,8 +206,8 @@ def _compute_range_weights(guide, grid_shape):
   gk_ceil = jnp.ceil(gk_float - 0.5)
 
   # Compute tent weights before clipping.
-  wk_floor = smoothed_lerp_weight(gk_floor, gk_float)
-  wk_ceil = smoothed_lerp_weight(gk_ceil, gk_float)
+  wk_floor = smoothed_lerp_weight(gk_floor + 0.5, gk_float)
+  wk_ceil = smoothed_lerp_weight(gk_ceil + 0.5, gk_float)
 
   # Cast to int for indexing.
   gk_floor = gk_floor.astype(jnp.int32)
@@ -325,12 +325,12 @@ def bilateral_slice(grid, guide):
   gj1 = gj0 + 1
   gk1 = gk0 + 1
 
-  wi0 = lerp_weight(gi0, gif)
-  wi1 = lerp_weight(gi1, gif)
-  wj0 = lerp_weight(gj0, gjf)
-  wj1 = lerp_weight(gj1, gjf)
-  wk0 = smoothed_lerp_weight(gk0, gkf)
-  wk1 = smoothed_lerp_weight(gk1, gkf)
+  wi0 = lerp_weight(gi0 + 0.5, gif)
+  wi1 = lerp_weight(gi1 + 0.5, gif)
+  wj0 = lerp_weight(gj0 + 0.5, gjf)
+  wj1 = lerp_weight(gj1 + 0.5, gjf)
+  wk0 = smoothed_lerp_weight(gk0 + 0.5, gkf)
+  wk1 = smoothed_lerp_weight(gk1 + 0.5, gkf)
 
   w_000 = wi0 * wj0 * wk0
   w_001 = wi0 * wj0 * wk1
