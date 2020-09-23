@@ -27,13 +27,13 @@ void BilateralSliceApply(nda::array_ref_of_rank<const float, 6> grid,
                          nda::array_ref_of_rank<float, 4> out) {
   // - Samples centered at 0.5.
   // - Repeating boundary conditions.
-  const int grid_input_channels = grid.shape().dim(0).extent();
-  const int grid_depth = grid.shape().dim(2).extent();
-  const int grid_width = grid.shape().dim(3).extent();
-  const int grid_height = grid.shape().dim(4).extent();
-  const int input_channels = input.shape().dim(0).extent();
-  const int input_width = input.shape().dim(1).extent();
-  const int input_height = input.shape().dim(2).extent();
+  const int grid_input_channels = grid.shape().dim<0>().extent();
+  const int grid_depth = grid.shape().dim<2>().extent();
+  const int grid_width = grid.shape().dim<3>().extent();
+  const int grid_height = grid.shape().dim<4>().extent();
+  const int input_channels = input.shape().dim<0>().extent();
+  const int input_width = input.shape().dim<1>().extent();
+  const int input_height = input.shape().dim<2>().extent();
   const float scale_x = static_cast<float>(grid_width) / input_width;
   const float scale_y = static_cast<float>(grid_height) / input_height;
 
@@ -75,7 +75,8 @@ void BilateralSliceApply(nda::array_ref_of_rank<const float, 6> grid,
       } else {  // Offset term
         value += grid_sample;
       }
-    }
+    }  // j
+
     out(i, x, y, b) = value;
   });
 }
@@ -85,12 +86,12 @@ void BilateralSliceApplyGridGrad(
     nda::array_ref_of_rank<const float, 4> input,
     nda::array_ref_of_rank<const float, 4> codomain_tangent,
     nda::array_ref_of_rank<float, 6> vjp_out) {
-  const int grid_depth = vjp_out.shape().dim(2).extent();
-  const int grid_width = vjp_out.shape().dim(3).extent();
-  const int grid_height = vjp_out.shape().dim(4).extent();
-  const int input_channels = input.shape().dim(0).extent();
-  const int input_width = input.shape().dim(1).extent();
-  const int input_height = input.shape().dim(2).extent();
+  const int grid_depth = vjp_out.shape().dim<2>().extent();
+  const int grid_width = vjp_out.shape().dim<3>().extent();
+  const int grid_height = vjp_out.shape().dim<4>().extent();
+  const int input_channels = input.shape().dim<0>().extent();
+  const int input_width = input.shape().dim<1>().extent();
+  const int input_height = input.shape().dim<2>().extent();
   const float scale_x = static_cast<float>(input_width) / grid_width;
   const float scale_y = static_cast<float>(input_height) / grid_height;
 
@@ -131,6 +132,7 @@ void BilateralSliceApplyGridGrad(
         vjp_value += grad_value * codomain_tangent(i, x_mirror, y_mirror, b);
       }  // y
     }    // x
+
     vjp_out(j, i, gz, gx, gy, b) = vjp_value;
   });
 }
@@ -141,14 +143,14 @@ void BilateralSliceApplyGuideGrad(
     nda::array_ref_of_rank<const float, 4> input,
     nda::array_ref_of_rank<const float, 4> codomain_tangent,
     nda::array_ref_of_rank<float, 3> vjp_out) {
-  const int grid_input_channels = grid.shape().dim(0).extent();
-  const int output_channels = grid.shape().dim(1).extent();
-  const int grid_depth = grid.shape().dim(2).extent();
-  const int grid_width = grid.shape().dim(3).extent();
-  const int grid_height = grid.shape().dim(4).extent();
-  const int input_channels = input.shape().dim(0).extent();
-  const int input_width = input.shape().dim(1).extent();
-  const int input_height = input.shape().dim(2).extent();
+  const int grid_input_channels = grid.shape().dim<0>().extent();
+  const int output_channels = grid.shape().dim<1>().extent();
+  const int grid_depth = grid.shape().dim<2>().extent();
+  const int grid_width = grid.shape().dim<3>().extent();
+  const int grid_height = grid.shape().dim<4>().extent();
+  const int input_channels = input.shape().dim<0>().extent();
+  const int input_width = input.shape().dim<1>().extent();
+  const int input_height = input.shape().dim<2>().extent();
   const float scale_x = static_cast<float>(grid_width) / input_width;
   const float scale_y = static_cast<float>(grid_height) / input_height;
 
@@ -197,6 +199,7 @@ void BilateralSliceApplyGuideGrad(
 
       vjp_value += grad_value * codomain_tangent(i, x, y, b);
     }  // Sum over i.
+
     vjp_out(x, y, b) = vjp_value;
   });
 }
@@ -206,12 +209,12 @@ void BilateralSliceApplyInputGrad(
     nda::array_ref_of_rank<const float, 3> guide,
     nda::array_ref_of_rank<const float, 4> codomain_tangent,
     nda::array_ref_of_rank<float, 4> vjp_out) {
-  const int output_channels = grid.shape().dim(1).extent();
-  const int grid_depth = grid.shape().dim(2).extent();
-  const int grid_width = grid.shape().dim(3).extent();
-  const int grid_height = grid.shape().dim(4).extent();
-  const int guide_width = guide.shape().dim(0).extent();
-  const int guide_height = guide.shape().dim(1).extent();
+  const int output_channels = grid.shape().dim<1>().extent();
+  const int grid_depth = grid.shape().dim<2>().extent();
+  const int grid_width = grid.shape().dim<3>().extent();
+  const int grid_height = grid.shape().dim<4>().extent();
+  const int guide_width = guide.shape().dim<0>().extent();
+  const int guide_height = guide.shape().dim<1>().extent();
   const float scale_x = static_cast<float>(grid_width) / guide_width;
   const float scale_y = static_cast<float>(grid_height) / guide_height;
 
@@ -249,6 +252,7 @@ void BilateralSliceApplyInputGrad(
 
       vjp_value += grad_val * codomain_tangent(i, x, y, b);
     }  // sum over i.
+
     vjp_out(j, x, y, b) = vjp_value;
   });
 }
