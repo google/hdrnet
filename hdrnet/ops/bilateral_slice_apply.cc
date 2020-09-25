@@ -27,13 +27,13 @@ void BilateralSliceApply(nda::array_ref_of_rank<const float, 6> grid,
                          nda::array_ref_of_rank<float, 4> out) {
   // - Samples centered at 0.5.
   // - Repeating boundary conditions.
-  const int grid_input_channels = grid.shape().dim<0>().extent();
-  const int grid_depth = grid.shape().dim<2>().extent();
-  const int grid_width = grid.shape().dim<3>().extent();
-  const int grid_height = grid.shape().dim<4>().extent();
-  const int input_channels = input.shape().dim<0>().extent();
-  const int input_width = input.shape().dim<1>().extent();
-  const int input_height = input.shape().dim<2>().extent();
+  const int grid_input_channels = grid.dim<0>().extent();
+  const int grid_depth = grid.dim<2>().extent();
+  const int grid_width = grid.dim<3>().extent();
+  const int grid_height = grid.dim<4>().extent();
+  const int input_channels = input.dim<0>().extent();
+  const int input_width = input.dim<1>().extent();
+  const int input_height = input.dim<2>().extent();
   const float scale_x = static_cast<float>(grid_width) / input_width;
   const float scale_y = static_cast<float>(grid_height) / input_height;
 
@@ -86,12 +86,12 @@ void BilateralSliceApplyGridGrad(
     nda::array_ref_of_rank<const float, 4> input,
     nda::array_ref_of_rank<const float, 4> codomain_tangent,
     nda::array_ref_of_rank<float, 6> vjp_out) {
-  const int grid_depth = vjp_out.shape().dim<2>().extent();
-  const int grid_width = vjp_out.shape().dim<3>().extent();
-  const int grid_height = vjp_out.shape().dim<4>().extent();
-  const int input_channels = input.shape().dim<0>().extent();
-  const int input_width = input.shape().dim<1>().extent();
-  const int input_height = input.shape().dim<2>().extent();
+  const int grid_depth = vjp_out.dim<2>().extent();
+  const int grid_width = vjp_out.dim<3>().extent();
+  const int grid_height = vjp_out.dim<4>().extent();
+  const int input_channels = input.dim<0>().extent();
+  const int input_width = input.dim<1>().extent();
+  const int input_height = input.dim<2>().extent();
   const float scale_x = static_cast<float>(input_width) / grid_width;
   const float scale_y = static_cast<float>(input_height) / grid_height;
 
@@ -124,7 +124,7 @@ void BilateralSliceApplyGridGrad(
           wz = 1.0f;
         }
 
-        // Index input accounting for optional offset.
+        // Index `input` accounting for optional offset.
         const float input_value =
             (j < input_channels) ? input(j, x_mirror, y_mirror, b) : 1.0f;
         const float grad_value = wx * wy * wz * input_value;
@@ -143,14 +143,14 @@ void BilateralSliceApplyGuideGrad(
     nda::array_ref_of_rank<const float, 4> input,
     nda::array_ref_of_rank<const float, 4> codomain_tangent,
     nda::array_ref_of_rank<float, 3> vjp_out) {
-  const int grid_input_channels = grid.shape().dim<0>().extent();
-  const int output_channels = grid.shape().dim<1>().extent();
-  const int grid_depth = grid.shape().dim<2>().extent();
-  const int grid_width = grid.shape().dim<3>().extent();
-  const int grid_height = grid.shape().dim<4>().extent();
-  const int input_channels = input.shape().dim<0>().extent();
-  const int input_width = input.shape().dim<1>().extent();
-  const int input_height = input.shape().dim<2>().extent();
+  const int grid_input_channels = grid.dim<0>().extent();
+  const int output_channels = grid.dim<1>().extent();
+  const int grid_depth = grid.dim<2>().extent();
+  const int grid_width = grid.dim<3>().extent();
+  const int grid_height = grid.dim<4>().extent();
+  const int input_channels = input.dim<0>().extent();
+  const int input_width = input.dim<1>().extent();
+  const int input_height = input.dim<2>().extent();
   const float scale_x = static_cast<float>(grid_width) / input_width;
   const float scale_y = static_cast<float>(grid_height) / input_height;
 
@@ -192,6 +192,7 @@ void BilateralSliceApplyGuideGrad(
         }      // gx
         // Grid trilinear interpolation.
 
+        // Index `input` accounting for optional offset.
         const float input_value =
             (j < input_channels) ? input(j, x, y, b) : 1.0f;
         grad_value += grid_sample * input_value;
@@ -209,12 +210,12 @@ void BilateralSliceApplyInputGrad(
     nda::array_ref_of_rank<const float, 3> guide,
     nda::array_ref_of_rank<const float, 4> codomain_tangent,
     nda::array_ref_of_rank<float, 4> vjp_out) {
-  const int output_channels = grid.shape().dim<1>().extent();
-  const int grid_depth = grid.shape().dim<2>().extent();
-  const int grid_width = grid.shape().dim<3>().extent();
-  const int grid_height = grid.shape().dim<4>().extent();
-  const int guide_width = guide.shape().dim<0>().extent();
-  const int guide_height = guide.shape().dim<1>().extent();
+  const int output_channels = grid.dim<1>().extent();
+  const int grid_depth = grid.dim<2>().extent();
+  const int grid_width = grid.dim<3>().extent();
+  const int grid_height = grid.dim<4>().extent();
+  const int guide_width = guide.dim<0>().extent();
+  const int guide_height = guide.dim<1>().extent();
   const float scale_x = static_cast<float>(grid_width) / guide_width;
   const float scale_y = static_cast<float>(grid_height) / guide_height;
 
@@ -230,7 +231,7 @@ void BilateralSliceApplyInputGrad(
 
     float vjp_value = 0.0f;
     for (int i = 0; i < output_channels; ++i) {
-      float grad_val = 0.0f;
+      float grad_value = 0.0f;
       // Grid trilinear interpolation to retrieve grid(gxf, gyf, gzf, i, j).
       for (int gy = gy0; gy < gy0 + 2; ++gy) {
         const int gyc = std::clamp(gy, 0, grid_height - 1);
@@ -244,14 +245,14 @@ void BilateralSliceApplyInputGrad(
             const int gzc = std::clamp(gz, 0, grid_depth - 1);
             const float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
 
-            grad_val += wx * wy * wz * grid(j, i, gzc, gxc, gyc, b);
+            grad_value += wx * wy * wz * grid(j, i, gzc, gxc, gyc, b);
           }  // gz
         }    // gy
       }      // gx
       // Grid trilinear interpolation.
 
-      vjp_value += grad_val * codomain_tangent(i, x, y, b);
-    }  // sum over i.
+      vjp_value += grad_value * codomain_tangent(i, x, y, b);
+    }  // Sum over i.
 
     vjp_out(j, x, y, b) = vjp_value;
   });

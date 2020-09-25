@@ -18,6 +18,7 @@
 #include <cmath>
 
 #include "numerics.h"
+#include "third_party/array/array.h"
 
 namespace hdrnet {
 
@@ -26,9 +27,9 @@ void BilateralSlice(nda::array_ref_of_rank<const float, 5> grid,
                     nda::array_ref_of_rank<float, 4> out) {
   // - Samples centered at 0.5f.
   // - Repeating boundary conditions.
-  const int grid_depth = grid.shape().dim<1>().extent();
-  const int grid_width = grid.shape().dim<2>().extent();
-  const int grid_height = grid.shape().dim<3>().extent();
+  const int grid_depth = grid.dim<1>().extent();
+  const int grid_width = grid.dim<2>().extent();
+  const int grid_height = grid.dim<3>().extent();
   const float scale_x = static_cast<float>(grid_width) / guide.width();
   const float scale_y = static_cast<float>(grid_height) / guide.height();
 
@@ -70,9 +71,9 @@ void BilateralSliceGridGrad(
     nda::array_ref_of_rank<const float, 3> guide,
     nda::array_ref_of_rank<const float, 4> codomain_tangent,
     nda::array_ref_of_rank<float, 5> grid_vjp_out) {
-  const int grid_depth = grid_vjp_out.shape().dim<1>().extent();
-  const int grid_width = grid_vjp_out.shape().dim<2>().extent();
-  const int grid_height = grid_vjp_out.shape().dim<3>().extent();
+  const int grid_depth = grid_vjp_out.dim<1>().extent();
+  const int grid_width = grid_vjp_out.dim<2>().extent();
+  const int grid_height = grid_vjp_out.dim<3>().extent();
   const int guide_width = guide.width();
   const int guide_height = guide.height();
   const float scale_x = static_cast<float>(guide.width()) / grid_width;
@@ -120,10 +121,10 @@ void BilateralSliceGuideGrad(
     nda::array_ref_of_rank<const float, 3> guide,
     nda::array_ref_of_rank<const float, 4> codomain_tangent,
     nda::array_ref_of_rank<float, 3> guide_vjp_out) {
-  const int grid_channels = grid.shape().dim<0>().extent();
-  const int grid_depth = grid.shape().dim<1>().extent();
-  const int grid_width = grid.shape().dim<2>().extent();
-  const int grid_height = grid.shape().dim<3>().extent();
+  const int grid_channels = grid.dim<0>().extent();
+  const int grid_depth = grid.dim<1>().extent();
+  const int grid_width = grid.dim<2>().extent();
+  const int grid_height = grid.dim<3>().extent();
   const float scale_x = static_cast<float>(grid_width) / guide.width();
   const float scale_y = static_cast<float>(grid_height) / guide.height();
 

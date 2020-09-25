@@ -31,28 +31,28 @@ using ::tensorflow::GpuLaunchConfig;
 
 }  // namespace
 
-__global__ void BilateralSliceKernel(const int nthreads, const int grid_height,
-                                     const int grid_width, const int grid_depth,
-                                     const int grid_channels,
-                                     const int guide_height,
-                                     const int guide_width, const float* grid,
-                                     const float* guide, float* out) {
+__global__ void BilateralSliceKernel(
+    const int nthreads, nda::array_ref_of_rank<const float, 5> grid,
+    nda::array_ref_of_rank<const float, 3> guide,
+    nda::array_ref_of_rank<float, 4> out) {
   // - Samples centered at 0.5.
   // - Repeating boundary conditions.
+  const int grid_channels = grid.dim<0>().extent();
+  const int grid_depth = grid.dim<1>().extent();
+  const int grid_width = grid.dim<2>().extent();
+  const int grid_height = grid.dim<3>().extent();
+  const int guide_width = guide.width();
+  const int guide_height = guide.height();
+
   const float scale_x = static_cast<float>(grid_width) / guide_width;
   const float scale_y = static_cast<float>(grid_height) / guide_height;
 
-  // TODO(jiawen): These extra strides can be removed once we have a CUDA
-  // compatible ND array abstraction.
-  const int grid_z_stride = grid_channels;
-  const int grid_x_stride = grid_z_stride * grid_depth;
-  const int grid_y_stride = grid_x_stride * grid_width;
-  const int grid_b_stride = grid_y_stride * grid_height;
-
+  // Factor the 1D index `idx` back into a 4D index.
+  // TODO(jiawen): Remove the factorization by launching a 3D grid and using a
+  // for loop over the remaining axis instead.
   const int output_x_stride = grid_channels;
   const int output_y_stride = output_x_stride * guide_width;
   const int output_b_stride = output_y_stride * guide_height;
-
   CUDA_1D_KERNEL_LOOP(idx, nthreads) {
     const int c = idx % grid_channels;
     const int x = (idx / output_x_stride) % guide_width;
@@ -62,8 +62,7 @@ __global__ void BilateralSliceKernel(const int nthreads, const int grid_height,
     const float gxf = (x + 0.5f) * scale_x;
     const float gyf = (y + 0.5f) * scale_y;
     // TODO(jiawen): Offset gz by 0.5f as well.
-    const int guide_idx = x + guide_width * (y + guide_height * b);
-    const float gzf = guide[guide_idx] * grid_depth;
+    const float gzf = guide(x, y, b) * grid_depth;
 
     const int gx0 = static_cast<int>(std::floor(gxf - 0.5f));
     const int gy0 = static_cast<int>(std::floor(gyf - 0.5f));
@@ -81,38 +80,36 @@ __global__ void BilateralSliceKernel(const int nthreads, const int grid_height,
           const int gzc = std::clamp(gz, 0, grid_depth - 1);
           const float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
 
-          const int grid_idx = c + grid_z_stride * gzc + grid_x_stride * gxc +
-                               grid_y_stride * gyc + grid_b_stride * b;
-          value += wx * wy * wz * grid[grid_idx];
+          value += wx * wy * wz * grid(c, gzc, gxc, gyc, b);
         }
       }
     }
     // Grid trilinear interpolation.
 
-    out[idx] = value;
+    out(c, x, y, b) = value;
   }
 }
 
 __global__ void BilateralSliceGridGradKernel(
-    const int nthreads, const int grid_height, const int grid_width,
-    const int grid_depth, const int grid_channels, const int guide_height,
-    const int guide_width, const float* grid, const float* guide,
-    const float* codomain_tangent, float* vjp) {
+    const int nthreads, nda::array_ref_of_rank<const float, 3> guide,
+    nda::array_ref_of_rank<const float, 4> codomain_tangent,
+    nda::array_ref_of_rank<float, 5> grid_vjp_out) {
+  const int grid_channels = grid_vjp_out.dim<0>().extent();
+  const int grid_depth = grid_vjp_out.dim<1>().extent();
+  const int grid_width = grid_vjp_out.dim<2>().extent();
+  const int grid_height = grid_vjp_out.dim<3>().extent();
+  const int guide_width = guide.width();
+  const int guide_height = guide.height();
   const float scale_x = static_cast<float>(guide_width) / grid_width;
   const float scale_y = static_cast<float>(guide_height) / grid_height;
 
-  // TODO(jiawen): These extra strides can be removed once we have a CUDA
-  // compatible ND array abstraction.
-  const int codomain_tangent_stride_x = grid_channels;
-  const int codomain_tangent_stride_y = codomain_tangent_stride_x * guide_width;
-  const int codomain_tangent_stride_b =
-      codomain_tangent_stride_y * guide_height;
-
+  // Factor the 1D index `idx` back into a 5D index.
+  // TODO(jiawen): Remove the factorization by launching a 3D grid and using a
+  // for loop over the remaining two axes instead.
   const int grid_z_stride = grid_channels;
   const int grid_x_stride = grid_z_stride * grid_depth;
   const int grid_y_stride = grid_x_stride * grid_width;
   const int grid_b_stride = grid_y_stride * grid_height;
-
   CUDA_1D_KERNEL_LOOP(idx, nthreads) {
     const int gc = idx % grid_channels;
     const int gz = (idx / grid_z_stride) % grid_depth;
@@ -140,45 +137,40 @@ __global__ void BilateralSliceGridGradKernel(
         const float wx = LerpWeight(gx + 0.5f, gxf);
 
         // TODO(jiawen): Offset gz by 0.5 as well.
-        const int guide_idx =
-            x_mirror + guide_width * y_mirror + guide_height * guide_width * b;
-        const float gzf = guide[guide_idx] * grid_depth;
+        const float gzf = guide(x_mirror, y_mirror, b) * grid_depth;
         float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
         if ((gz == 0 && gzf < 0.5f) ||
             (gz == grid_depth - 1 && gzf > grid_depth - 0.5f)) {
           wz = 1.0f;
         }
 
-        const int codomain_tangent_idx = gc +
-                                         codomain_tangent_stride_x * x_mirror +
-                                         codomain_tangent_stride_y * y_mirror +
-                                         codomain_tangent_stride_b * b;
-        vjp_value += wz * wx * wy * codomain_tangent[codomain_tangent_idx];
+        vjp_value += wz * wx * wy * codomain_tangent(gc, x_mirror, y_mirror, b);
       }  // y
     }    // x
 
-    vjp[idx] = vjp_value;
+    grid_vjp_out(gc, gz, gx, gy, b) = vjp_value;
   }
 }
 
 __global__ void BilateralSliceGuideGradKernel(
-    const int nthreads, const int grid_height, const int grid_width,
-    const int grid_depth, const int grid_channels, const int guide_height,
-    const int guide_width, const float* grid, const float* guide,
-    const float* codomain_tangent, float* vjp) {
+    const int nthreads, nda::array_ref_of_rank<const float, 5> grid,
+    nda::array_ref_of_rank<const float, 3> guide,
+    nda::array_ref_of_rank<const float, 4> codomain_tangent,
+    nda::array_ref_of_rank<float, 3> guide_vjp_out) {
+  const int grid_channels = grid.dim<0>().extent();
+  const int grid_depth = grid.dim<1>().extent();
+  const int grid_width = grid.dim<2>().extent();
+  const int grid_height = grid.dim<3>().extent();
+  const int guide_width = guide.width();
+  const int guide_height = guide.height();
   const float scale_x = static_cast<float>(grid_width) / guide_width;
   const float scale_y = static_cast<float>(grid_height) / guide_height;
 
-  // TODO(jiawen): These extra strides can be removed once we have a CUDA
-  // compatible ND array abstraction.
-  const int grid_z_stride = grid_channels;
-  const int grid_x_stride = grid_z_stride * grid_depth;
-  const int grid_y_stride = grid_x_stride * grid_width;
-  const int grid_b_stride = grid_y_stride * grid_height;
-
+  // Factor the 1D index `idx` back into a 3D index.
+  // TODO(jiawen): Remove the factorization by launching a 3D grid and using a
+  // for loop over the remaining two axes instead.
   const int guide_y_stride = guide_width;
   const int guide_b_stride = guide_y_stride * guide_height;
-
   CUDA_1D_KERNEL_LOOP(idx, nthreads) {
     const int x = idx % guide_width;
     const int y = (idx / guide_y_stride) % guide_height;
@@ -187,8 +179,7 @@ __global__ void BilateralSliceGuideGradKernel(
     const float gxf = (x + 0.5f) * scale_x;
     const float gyf = (y + 0.5f) * scale_y;
     // TODO(jiawen): Offset gz by 0.5f as well.
-    const int guide_idx = x + guide_width * (y + guide_height * b);
-    const float gzf = guide[guide_idx] * grid_depth;
+    const float gzf = guide(x, y, b) * grid_depth;
 
     const int gx0 = static_cast<int>(std::floor(gxf - 0.5f));
     const int gy0 = static_cast<int>(std::floor(gyf - 0.5f));
@@ -210,18 +201,14 @@ __global__ void BilateralSliceGuideGradKernel(
             const float dwz =
                 grid_depth * SmoothedLerpWeightGrad(gz + 0.5f, gzf);
 
-            const int grid_idx = c + grid_z_stride * gzc + grid_x_stride * gxc +
-                                 grid_y_stride * gyc + grid_b_stride * b;
-            grid_sample += wx * wy * dwz * grid[grid_idx];
+            grid_sample += wx * wy * dwz * grid(c, gzc, gxc, gyc, b);
           }
         }
       }
-      const int codomain_tangent_idx =
-          c + grid_channels * (x + guide_width * (y + guide_height * b));
-      vjp_value += grid_sample * codomain_tangent[codomain_tangent_idx];
+      vjp_value += grid_sample * codomain_tangent(c, x, y, b);
     }  // Sum over c.
 
-    vjp[idx] = vjp_value;
+    guide_vjp_out(x, y, b) = vjp_value;
   }
 }
 
@@ -232,17 +219,12 @@ bool BilateralSliceCudaLauncher(const GpuDevice& device,
                                 nda::array_ref_of_rank<const float, 3> guide,
                                 nda::array_ref_of_rank<float, 4> out) {
   const int out_count = out.size();
-  const auto [grid_channels, grid_depth, grid_width, grid_height, batch_size] =
-      grid.shape().extent();
-  const auto [guide_width, guide_height, guide_batch_size] =
-      guide.shape().extent();
-
   if (out_count > 0) {
+    // TODO(jiawen): Use GetGpu3DLaunchConfig() to launch a 3D kernel then do a
+    // 1D loop over the inner axis.
     const GpuLaunchConfig config = GetGpuLaunchConfig(out_count, device);
     BilateralSliceKernel<<<config.block_count, config.thread_per_block, 0,
-                           device.stream()>>>(
-        out_count, grid_height, grid_width, grid_depth, grid_channels,
-        guide_height, guide_width, grid.data(), guide.data(), out.data());
+                           device.stream()>>>(out_count, grid, guide, out);
   }
 
   return device.ok();
@@ -255,28 +237,22 @@ bool BilateralSliceGradCudaLauncher(
     nda::array_ref_of_rank<float, 5> grid_vjp_out,
     nda::array_ref_of_rank<float, 3> guide_vjp_out) {
   const int grid_vjp_count = grid_vjp_out.size();
-  const auto [grid_channels, grid_depth, grid_width, grid_height, batch_size] =
-      grid.shape().extent();
-  const auto [guide_width, guide_height, guide_batch_size] =
-      guide.shape().extent();
-
   if (grid_vjp_count > 0) {
+    // TODO(jiawen): Use GetGpu3DLaunchConfig() to launch a 3D kernel then do a
+    // 1D loop over the two inner axes.
     const GpuLaunchConfig config = GetGpuLaunchConfig(grid_vjp_count, device);
     BilateralSliceGridGradKernel<<<config.block_count, config.thread_per_block,
                                    0, device.stream()>>>(
-        grid_vjp_count, grid_height, grid_width, grid_depth, grid_channels,
-        guide_height, guide_width, grid.data(), guide.data(),
-        codomain_tangent.data(), grid_vjp_out.data());
+        grid_vjp_count, guide, codomain_tangent, grid_vjp_out);
   }
 
   const int guide_vjp_count = guide_vjp_out.size();
   if (guide_vjp_count > 0) {
+    // TODO(jiawen): Use GetGpu3DLaunchConfig() to launch a 3D kernel.
     const GpuLaunchConfig config = GetGpuLaunchConfig(guide_vjp_count, device);
     BilateralSliceGuideGradKernel<<<config.block_count, config.thread_per_block,
                                     0, device.stream()>>>(
-        guide_vjp_count, grid_height, grid_width, grid_depth, grid_channels,
-        guide_height, guide_width, grid.data(), guide.data(),
-        codomain_tangent.data(), guide_vjp_out.data());
+        guide_vjp_count, grid, guide, codomain_tangent, guide_vjp_out);
   }
 
   return device.ok();
