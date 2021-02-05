@@ -99,9 +99,9 @@ __global__ void BilateralSliceApplyKernel(
             const int grid_idx = j + grid_i_stride * i + grid_z_stride * gzc +
                                  grid_x_stride * gxc + grid_y_stride * gyc +
                                  grid_b_stride * b;
-            // TODO(jiawen): The workaround used for input grad below doesn't
-            // even work here. Using replacing `grid_data` with `grid.base()`
-            // breaks tests.
+            // TODO(jiawen): The workaround used for input grad below
+            // doesn't even work here. Using replacing `grid_data` with
+            // `grid.base()` breaks tests.
             //
             // Even `grid_data[grid.shape()(j, i, gzc, gxc, gyc, b)]` is
             // broken.
@@ -177,7 +177,10 @@ __global__ void BilateralSliceApplyGridGradKernel(
         const float wx = LerpWeight(gx + 0.5f, gxf);
 
         // TODO(jiawen): Offset gz by 0.5 as well.
-        const float gzf = guide(x_mirror, y_mirror, b) * grid_depth;
+        const int guide_idx =
+            x_mirror + input_width * y_mirror + input_height * input_width * b;
+        // TODO(jiawen): Use nda::array_ref::operator() instead.
+        const float gzf = guide.base()[guide_idx] * grid_depth;
         float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
         if ((gz == 0 && gzf < 0.5f) ||
             (gz == grid_depth - 1 && gzf > grid_depth - 0.5f)) {
@@ -189,7 +192,12 @@ __global__ void BilateralSliceApplyGridGradKernel(
             (j < input_channels) ? input(j, x_mirror, y_mirror, b) : 1.0f;
         const float grad_value = wx * wy * wz * input_value;
 
-        vjp_value += grad_value * codomain_tangent(i, x_mirror, y_mirror, b);
+        const int codomain_tangent_idx =
+            i + codomain_tangent.dim<1>().stride() * x_mirror +
+            codomain_tangent.dim<2>().stride() * y_mirror +
+            codomain_tangent.dim<3>().stride() * b;
+        // TODO(jiawen): Use nda::array_ref::operator() instead.
+        vjp_value += grad_value * codomain_tangent.base()[codomain_tangent_idx];
       }  // y
     }    // x
 
@@ -197,14 +205,11 @@ __global__ void BilateralSliceApplyGridGradKernel(
   }
 }
 
-// TODO(jiawen): `grid_data` and `codomain_tangent_data` should not be necessary
-// but is needed to work around a compiler bug in -O2 mode.
 __global__ void BilateralSliceApplyGuideGradKernel(
     const int nthreads, nda::array_ref_of_rank<const float, 6> grid,
-    const float* grid_data, nda::array_ref_of_rank<const float, 3> guide,
+    nda::array_ref_of_rank<const float, 3> guide,
     nda::array_ref_of_rank<const float, 4> input,
     nda::array_ref_of_rank<const float, 4> codomain_tangent,
-    const float* codomain_tangent_data,
     nda::array_ref_of_rank<float, 3> vjp_out) {
   const int grid_input_channels = grid.dim<0>().extent();
   const int output_channels = grid.dim<1>().extent();
@@ -223,9 +228,6 @@ __global__ void BilateralSliceApplyGuideGradKernel(
   const int grid_x_stride = grid.dim<3>().stride();
   const int grid_y_stride = grid.dim<4>().stride();
   const int grid_b_stride = grid.dim<5>().stride();
-
-  // Factor the 1D index `idx` back into a 3D index.
-  // TODO(jiawen): Remove the factorization by launching a 3D grid.
   const int input_y_stride = input_width;
   const int input_b_stride = input_y_stride * input_height;
   CUDA_1D_KERNEL_LOOP(idx, nthreads) {
@@ -236,7 +238,8 @@ __global__ void BilateralSliceApplyGuideGradKernel(
     const float gxf = (x + 0.5f) * scale_x;
     const float gyf = (y + 0.5f) * scale_y;
     // TODO(jiawen): Offset gz by 0.5 as well.
-    const float gzf = guide(x, y, b) * grid_depth;
+    const int guide_idx = x + input_width * (y + input_height * b);
+    const float gzf = guide.base()[guide_idx] * grid_depth;
 
     const int gx0 = static_cast<int>(std::floor(gxf - 0.5f));
     const int gy0 = static_cast<int>(std::floor(gyf - 0.5f));
@@ -267,39 +270,25 @@ __global__ void BilateralSliceApplyGuideGradKernel(
               const int grid_idx = j + grid_i_stride * i + grid_z_stride * gzc +
                                    grid_x_stride * gxc + grid_y_stride * gyc +
                                    grid_b_stride * b;
-              // TODO(jiawen): The workaround used for input grad below doesn't
-              // even work here. Using replacing `grid_data` with `grid.base()`
-              // breaks tests.
-              //
-              // Even `grid_data[grid.shape()(j, i, gzc, gxc, gyc, b)]` is
-              // broken.
-              //
-              // It *should* be just `grid(j, i, gzc, gxc, gyc, b)`.
-              grid_sample += wx * wy * dwz * grid_data[grid_idx];
+              // TODO(jiawen): Use nda::array_ref::operator() instead.
+              grid_sample += wx * wy * dwz * grid.base()[grid_idx];
             }  // gz
           }    // gy
         }      // gx
         // Grid trilinear interpolation.
 
-        // Index `input` accounting for optional offset.
+        const int input_idx = x + input_width * (y + input_height * b);
+        // TODO(jiawen): Use nda::array_ref::operator() instead.
         const float input_value =
-            (j < input_channels) ? input(j, x, y, b) : 1.0f;
+            (j < input_channels) ? input.base()[input_idx] : 1.0f;
         grad_value += grid_sample * input_value;
       }  // Sum over j.
 
+      // TODO(jiawen): Use nda::array_ref::operator() instead.
       const int codomain_tangent_idx =
           i + output_channels * (x + input_width * (y + input_height * b));
-      // TODO(jiawen): The workaround used for input grad below doesn't
-      // even work here. Using replacing `codomain_tangent_data` with
-      // `codomain_tangent.base()` breaks tests.
-      //
-      // Even `codomain_tangent_data[codomain_tangent.shape()(i, x, y, b)]` is
-      // broken.
-      //
-      // It *should* be just `codomain_tangent(i, x, y, b)`.
-      vjp_value += grad_value * codomain_tangent_data[codomain_tangent_idx];
+      vjp_value += grad_value * codomain_tangent.base()[codomain_tangent_idx];
     }  // Sum over i.
-
     vjp_out(x, y, b) = vjp_value;
   }
 }
@@ -333,7 +322,8 @@ __global__ void BilateralSliceApplyInputGradKernel(
     const float gxf = (x + 0.5f) * scale_x;
     const float gyf = (y + 0.5f) * scale_y;
     // TODO(jiawen): Offset gz by 0.5 as well.
-    const float gzf = guide(x, y, b) * grid_depth;
+    const int guide_idx = x + guide_width * (y + guide_height * b);
+    const float gzf = guide.base()[guide_idx] * grid_depth;
 
     const int gx0 = static_cast<int>(std::floor(gxf - 0.5f));
     const int gy0 = static_cast<int>(std::floor(gyf - 0.5f));
@@ -365,9 +355,10 @@ __global__ void BilateralSliceApplyInputGradKernel(
       }      // gx
       // Grid trilinear interpolation.
 
-      vjp_value += grad_value * codomain_tangent(i, x, y, b);
-    }  // Sum over i.
-
+      const int codomain_tangent_idx =
+          i + output_channels * (x + guide_width * (y + guide_height * b));
+      vjp_value += grad_value * codomain_tangent.base()[codomain_tangent_idx];
+    }  // sum over i.
     vjp_out(j, x, y, b) = vjp_value;
   }
 }
@@ -411,8 +402,7 @@ bool BilateralSliceApplyGradCudaLauncher(
     const GpuLaunchConfig config = GetGpuLaunchConfig(guide_vjp_count, device);
     BilateralSliceApplyGuideGradKernel<<<
         config.block_count, config.thread_per_block, 0, device.stream()>>>(
-        guide_vjp_count, grid, grid.data(), guide, input, codomain_tangent,
-        codomain_tangent.data(), guide_vjp_out);
+        guide_vjp_count, grid, guide, input, codomain_tangent, guide_vjp_out);
   }
 
   const int input_vjp_count = input_vjp_out.size();

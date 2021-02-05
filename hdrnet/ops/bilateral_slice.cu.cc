@@ -102,10 +102,10 @@ __global__ void BilateralSliceGridGradKernel(
   const int guide_height = guide.height();
   const float scale_x = static_cast<float>(guide_width) / grid_width;
   const float scale_y = static_cast<float>(guide_height) / grid_height;
-
-  // Factor the 1D index `idx` back into a 5D index.
-  // TODO(jiawen): Remove the factorization by launching a 3D grid and using a
-  // for loop over the remaining two axes instead.
+  const int codomain_tangent_stride_x = grid_channels;
+  const int codomain_tangent_stride_y = codomain_tangent_stride_x * guide_width;
+  const int codomain_tangent_stride_b =
+      codomain_tangent_stride_y * guide_height;
   const int grid_z_stride = grid_channels;
   const int grid_x_stride = grid_z_stride * grid_depth;
   const int grid_y_stride = grid_x_stride * grid_width;
@@ -137,14 +137,22 @@ __global__ void BilateralSliceGridGradKernel(
         const float wx = LerpWeight(gx + 0.5f, gxf);
 
         // TODO(jiawen): Offset gz by 0.5 as well.
-        const float gzf = guide(x_mirror, y_mirror, b) * grid_depth;
+        const int guide_idx =
+            x_mirror + guide_width * y_mirror + guide_height * guide_width * b;
+        // TODO(jiawen): Use nda::array_ref::operator() instead.
+        const float gzf = guide.base()[guide_idx] * grid_depth;
         float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
         if ((gz == 0 && gzf < 0.5f) ||
             (gz == grid_depth - 1 && gzf > grid_depth - 0.5f)) {
           wz = 1.0f;
         }
-
-        vjp_value += wz * wx * wy * codomain_tangent(gc, x_mirror, y_mirror, b);
+        const int codomain_tangent_idx = gc +
+                                         codomain_tangent_stride_x * x_mirror +
+                                         codomain_tangent_stride_y * y_mirror +
+                                         codomain_tangent_stride_b * b;
+        // TODO(jiawen): Use nda::array_ref::operator() instead.
+        vjp_value +=
+            wz * wx * wy * codomain_tangent.base()[codomain_tangent_idx];
       }  // y
     }    // x
 
@@ -165,12 +173,13 @@ __global__ void BilateralSliceGuideGradKernel(
   const int guide_height = guide.height();
   const float scale_x = static_cast<float>(grid_width) / guide_width;
   const float scale_y = static_cast<float>(grid_height) / guide_height;
-
-  // Factor the 1D index `idx` back into a 3D index.
-  // TODO(jiawen): Remove the factorization by launching a 3D grid and using a
-  // for loop over the remaining two axes instead.
+  const int grid_z_stride = grid_channels;
+  const int grid_x_stride = grid_z_stride * grid_depth;
+  const int grid_y_stride = grid_x_stride * grid_width;
+  const int grid_b_stride = grid_y_stride * grid_height;
   const int guide_y_stride = guide_width;
   const int guide_b_stride = guide_y_stride * guide_height;
+
   CUDA_1D_KERNEL_LOOP(idx, nthreads) {
     const int x = idx % guide_width;
     const int y = (idx / guide_y_stride) % guide_height;
@@ -179,8 +188,9 @@ __global__ void BilateralSliceGuideGradKernel(
     const float gxf = (x + 0.5f) * scale_x;
     const float gyf = (y + 0.5f) * scale_y;
     // TODO(jiawen): Offset gz by 0.5f as well.
-    const float gzf = guide(x, y, b) * grid_depth;
-
+    const int guide_idx = x + guide_width * (y + guide_height * b);
+    // TODO(jiawen): Use nda::array_ref::operator() instead.
+    const float gzf = guide.base()[guide_idx] * grid_depth;
     const int gx0 = static_cast<int>(std::floor(gxf - 0.5f));
     const int gy0 = static_cast<int>(std::floor(gyf - 0.5f));
     const int gz0 = static_cast<int>(std::floor(gzf - 0.5f));
@@ -200,20 +210,23 @@ __global__ void BilateralSliceGuideGradKernel(
             // TODO(jiawen): Offset gz by 0.5 as well?
             const float dwz =
                 grid_depth * SmoothedLerpWeightGrad(gz + 0.5f, gzf);
-
-            grid_sample += wx * wy * dwz * grid(c, gzc, gxc, gyc, b);
+            const int grid_idx = c + grid_z_stride * gzc + grid_x_stride * gxc +
+                                 grid_y_stride * gyc + grid_b_stride * b;
+            // TODO(jiawen): Use nda::array_ref::operator() instead.
+            grid_sample += wx * wy * dwz * grid.base()[grid_idx];
           }
         }
       }
-      vjp_value += grid_sample * codomain_tangent(c, x, y, b);
+      const int codomain_tangent_idx =
+          c + grid_channels * (x + guide_width * (y + guide_height * b));
+      // TODO(jiawen): Use nda::array_ref::operator() instead.
+      vjp_value += grid_sample * codomain_tangent.base()[codomain_tangent_idx];
     }  // Sum over c.
-
     guide_vjp_out(x, y, b) = vjp_value;
   }
 }
 
 namespace hdrnet {
-
 bool BilateralSliceCudaLauncher(const GpuDevice& device,
                                 nda::array_ref_of_rank<const float, 5> grid,
                                 nda::array_ref_of_rank<const float, 3> guide,
