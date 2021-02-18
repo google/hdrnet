@@ -16,7 +16,9 @@ core.workflow(
     authoring = authoring.allowed(
         default = "Googler <noreply@google.com>",
         allowlist = [
+            "fbleibel",
             "jiawen",
+            "tianfan"
         ],
     ),
     transformations = [
