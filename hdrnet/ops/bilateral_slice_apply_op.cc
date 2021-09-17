@@ -418,14 +418,24 @@ REGISTER_OP("BilateralSliceApply")
       return Status::OK();
     });
 
-// TODO(jiawen): Investigate whether we need to set a shape function for
-// gradient ops or if they're automatic.
 REGISTER_OP("BilateralSliceApplyGrad")
     .Input("grid: float")
     .Input("guide: float")
     .Input("input: float")
     .Input("backprop: float")
     .Attr("has_offset: bool")
+    .SetShapeFn([](InferenceContext* c) {
+      ShapeHandle grid;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 5, &grid));
+      ShapeHandle guide;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 3, &guide));
+      ShapeHandle input_image;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 4, &input_image));
+      c->set_output(0, grid);
+      c->set_output(1, guide);
+      c->set_output(2, input_image);
+      return Status::OK();
+    })
     .Output("grid_grad: float")
     .Output("guide_grad: float")
     .Output("input_grad: float");
