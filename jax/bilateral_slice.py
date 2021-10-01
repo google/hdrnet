@@ -240,12 +240,8 @@ def _compute_range_weights(guide, grid_shape):
 
   range_weights = jnp.zeros(
       (guide_padded.shape[0], guide_padded.shape[1], grid_depth))
-  range_weights = jax.ops.index_add(range_weights,
-                                    jax.ops.index[ii, jj,
-                                                  gk_floor_clipped], wk_floor)
-  range_weights = jax.ops.index_add(range_weights,
-                                    jax.ops.index[ii, jj,
-                                                  gk_ceil_clipped], wk_ceil)
+  range_weights = range_weights.at[ii, jj, gk_floor_clipped].add(wk_floor)
+  range_weights = range_weights.at[ii, jj, gk_ceil_clipped].add(wk_ceil)
 
   return range_weights
 
