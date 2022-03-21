@@ -36,7 +36,9 @@ void BilateralSlice(nda::array_ref_of_rank<const float, 5> grid,
   nda::for_all_indices(out.shape(), [&](int c, int x, int y, int b) {
     const float gxf = (x + 0.5f) * scale_x;
     const float gyf = (y + 0.5f) * scale_y;
-    // TODO(jiawen): Offset gz by 0.5f as well.
+    // Because 0.5f applied afterwards in calculating gz0 and wz, the effective
+    // depth index is:
+    //    guide * grid_depth + 0.5f
     const float gzf = guide(x, y, b) * grid_depth;
 
     const int gx0 = static_cast<int>(std::floor(gxf - 0.5f));
@@ -100,7 +102,6 @@ void BilateralSliceGridGrad(
         const float gxf = (x + 0.5f) / scale_x;
         const float wx = LerpWeight(gx + 0.5f, gxf);
 
-        // TODO(jiawen): Offset gz by 0.5 as well.
         const float gzf = guide(x_mirror, y_mirror, b) * grid_depth;
         float wz = SmoothedLerpWeight(gz + 0.5f, gzf);
         if ((gz == 0 && gzf < 0.5f) ||
@@ -131,7 +132,6 @@ void BilateralSliceGuideGrad(
   nda::for_all_indices(guide_vjp_out.shape(), [&](int x, int y, int b) {
     const float gxf = (x + 0.5f) * scale_x;
     const float gyf = (y + 0.5f) * scale_y;
-    // TODO(jiawen): Offset gz by 0.5f as well.
     const float gzf = guide(x, y, b) * grid_depth;
 
     const int gx0 = static_cast<int>(std::floor(gxf - 0.5f));
@@ -153,7 +153,6 @@ void BilateralSliceGuideGrad(
 
           for (int gz = gz0; gz < gz0 + 2; ++gz) {
             const int gzc = std::clamp(gz, 0, grid_depth - 1);
-            // TODO(jiawen): Offset gz by 0.5 as well?
             const float dwz =
                 grid_depth * SmoothedLerpWeightGrad(gz + 0.5f, gzf);
 
