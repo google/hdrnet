@@ -1,4 +1,3 @@
-# Lint as: python3
 """Tests comparing bilateral slice between JAX and TF2."""
 
 import time

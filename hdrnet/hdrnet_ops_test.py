@@ -1,4 +1,3 @@
-# Lint as: python3
 """Tests for custom tensorflow operators in HDRnet (CUDA only)."""
 
 import collections
