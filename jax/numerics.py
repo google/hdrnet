@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Numerics for bilateral_slice."""
 
 import jax.numpy as jnp
