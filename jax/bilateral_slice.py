@@ -19,6 +19,7 @@ import jax.numpy as jnp
 from .numerics import lerp_weight
 from .numerics import smoothed_lerp_weight
 from .numerics import smoothed_lerp_weight_grad
+import numpy as np
 
 
 # TODO(jiawen): Cache intermediates and pass them in.
@@ -121,7 +122,15 @@ def _compute_scale_pad(image_extent, grid_extent):
   """
   scale = image_extent / grid_extent
   half_scale = 0.5 * scale
-  half_pad = jnp.ceil(half_scale).astype(jnp.int32)
+  # IMPORTANT: We use np.ceil instead of jnp.ceil here; jnp.ceil() transforms
+  # its input arguments to a dynamic value during tracing of Jaxprs. A dynamic
+  # value can't be used as the stop argument of jnp.arange(), so this prevents
+  # us from jit-ing a function containing bilateral_slice_vjp.
+  #
+  # Instead, use np.ceil here; this will work fine as long as image_extent and
+  # grid_extent are constants for the purpose of tracing (these inputs are
+  # expected to be image shapes).
+  half_pad = np.ceil(half_scale).astype(jnp.int32)
 
   return scale, half_pad
 
