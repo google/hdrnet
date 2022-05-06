@@ -31,7 +31,7 @@ def bilateral_slice_guide_vjp(grid, guide, codomain_tangent):
   Args:
     grid: The bilateral grid with shape (gh, gw, gd, gc).
     guide: The guide image with shape (h, w).
-    codomain_tangent: The codomain tangent with shape (gh, gw, gc).
+    codomain_tangent: The codomain tangent with shape (h, w, gc).
 
   Returns:
     The vector-Jacobian product codomain_tangent * J^T(grid, guide) with shape
